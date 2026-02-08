@@ -24,6 +24,8 @@ app = Flask(__name__)
 @app.get('/assets/<path:subpath>')
 def assets(subpath: str):
     # Serve vendored assets under docs/assets (useful for local Flask runs).
+    from pathlib import Path
+
     base = Path(__file__).resolve().parent / 'docs' / 'assets'
     return send_from_directory(base, subpath)
 
@@ -335,6 +337,8 @@ HTML_TEMPLATE = """
     {% endif %}
   </main>
 
+  <div class="app-version" id="app_version"></div>
+
   <script>
     // 서버에서 내려준 KRW 기준 환율표(기준 타입별).
     // 예: ratesByType["sale"]["USD"] = 1 USD 당 KRW (매매기준율)
@@ -352,17 +356,18 @@ HTML_TEMPLATE = """
     const removeFieldBtn = document.getElementById("remove_field");
     const rateTypeSelect = document.getElementById("rate_type");
     const fieldCountText = document.getElementById("field_count_text");
+    
+    const UI_BUILD = "2026-02-08T10:50:32Z";
 
 
     
-        const UI_VERSION = "83dffd5";
-        const appVersionEl = document.getElementById("app_version");
+            const DEFAULT_UI_VERSION = '2239fa4';
+    const UI_VERSION = (new URLSearchParams(window.location.search)).get('v') || DEFAULT_UI_VERSION;
+const appVersionEl = document.getElementById("app_version");
         if (appVersionEl) {
           appVersionEl.textContent = `v${UI_VERSION}`;
           appVersionEl.title = `build ${UI_BUILD}`;
         }
-    
-    const UI_BUILD = "2026-02-08T10:50:32Z";
 
     function updateKeyboardClass() {
       const vv = window.visualViewport;
@@ -721,7 +726,6 @@ HTML_TEMPLATE = """
     applyEnabledState();
     updateFrom(0);
   </script>
-  <div class="app-version" id="app_version"></div>
 </body>
 </html>
 """
@@ -891,6 +895,9 @@ if __name__ == "__main__":
     debug = os.getenv("DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}
 
     app.run(host=host, port=port, debug=debug)
+
+
+
 
 
 

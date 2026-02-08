@@ -27,7 +27,7 @@ CURRENCY_META: dict[str, dict[str, object]] = {
     "CNY": {"label": "중국 위안 (CNY)", "flag": "🇨🇳", "market_code": "FX_CNYKRW", "source_unit": 1},
     "PHP": {"label": "필리핀 페소 (PHP)", "flag": "🇵🇭", "market_code": "FX_PHPKRW", "source_unit": 1},
     "TWD": {"label": "대만 달러 (TWD)", "flag": "🇹🇼", "market_code": "FX_TWDKRW", "source_unit": 1},
-    "JPY": {"label": "일본 엔화 (JPY)", "flag": "🇯🇵", "market_code": "FX_JPYKRW", "source_unit": 100},
+    "JPY": {"label": "일본 엔 (JPY)", "flag": "🇯🇵", "market_code": "FX_JPYKRW", "source_unit": 100},
     "VND": {"label": "베트남 동 (VND)", "flag": "🇻🇳", "market_code": "FX_VNDKRW", "source_unit": 100},
     "THB": {"label": "태국 바트 (THB)", "flag": "🇹🇭", "market_code": "FX_THBKRW", "source_unit": 1},
     "EUR": {"label": "유로 (EUR)", "flag": "🇪🇺", "market_code": "FX_EURKRW", "source_unit": 1},

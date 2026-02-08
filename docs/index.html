@@ -251,6 +251,8 @@
     <div class="error" id="error" style="display:none;"></div>
   </main>
 
+  <div class="app-version" id="app_version"></div>
+
   <script>
     const DEFAULT_CODES = ["USD", "KRW", "PHP", "EUR", "JPY"];
     const MIN_FIELDS = 1;
@@ -267,16 +269,17 @@
     const meta = document.getElementById("meta");
     const errorEl = document.getElementById("error");
 
+    const UI_BUILD = "2026-02-08T10:50:32Z";
 
 
-    const UI_VERSION = "83dffd5";
-    const appVersionEl = document.getElementById("app_version");
+
+        const DEFAULT_UI_VERSION = '2239fa4';
+    const UI_VERSION = (new URLSearchParams(window.location.search)).get('v') || DEFAULT_UI_VERSION;
+const appVersionEl = document.getElementById("app_version");
     if (appVersionEl) {
       appVersionEl.textContent = `v${UI_VERSION}`;
       appVersionEl.title = `build ${UI_BUILD}`;
     }
-
-    const UI_BUILD = "2026-02-08T10:50:32Z";
 
     function updateKeyboardClass() {
       const vv = window.visualViewport;
@@ -508,20 +511,20 @@
     function renderMeta(data) {
       const typeLabel = rateTypeSelect.options[rateTypeSelect.selectedIndex]?.textContent ?? "";
 
-      // Avoid innerHTML: keep meta text-only even if the snapshot content changes.
+      // Keep meta text-only.
       meta.replaceChildren();
 
       const line1 = document.createElement("div");
-      line1.appendChild(document.createTextNode("?? ??: "));
+      line1.appendChild(document.createTextNode("환율 기준: "));
       const strong = document.createElement("strong");
       strong.textContent = typeLabel;
       line1.appendChild(strong);
 
       const line2 = document.createElement("div");
-      line2.textContent = `????: ${data.fetched_at || "-"}`;
+      line2.textContent = `업데이트: ${data.fetched_at || "-"}`;
 
       const line3 = document.createElement("div");
-      line3.textContent = data.source ? `??: ??? ?? (${data.source})` : "??: ??? ??";
+      line3.textContent = data.source ? `출처: 네이버 금융 (${data.source})` : "출처: 네이버 금융";
 
       meta.appendChild(line1);
       meta.appendChild(line2);
@@ -664,9 +667,11 @@
       errorEl.textContent = `환율 데이터를 불러오지 못했습니다: ${e.message}`;
     });
   </script>
-  <div class="app-version" id="app_version"></div>
 </body>
 </html>
+
+
+
 
 
 
