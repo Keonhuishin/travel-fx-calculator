@@ -89,6 +89,27 @@ HTML_TEMPLATE = """
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
     }
+
+        .app-version {
+          position: fixed;
+          right: calc(12px + env(safe-area-inset-right));
+          bottom: calc(12px + env(safe-area-inset-bottom));
+          z-index: 999;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: -0.01em;
+          color: rgba(11,27,58,0.62);
+          background: rgba(255,255,255,0.72);
+          border: 1px solid rgba(47, 124, 255, 0.18);
+          border-radius: 999px;
+          padding: 6px 10px;
+          user-select: none;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          box-shadow: 0 10px 18px rgba(11, 27, 58, 0.06);
+          pointer-events: none;
+        }
+    
     .version-badge {
       position: absolute;
       top: 14px;
@@ -323,9 +344,16 @@ HTML_TEMPLATE = """
     const rateTypeSelect = document.getElementById("rate_type");
     const fieldCountText = document.getElementById("field_count_text");
 
+
+    
+        const UI_VERSION = "83dffd5";
+        const appVersionEl = document.getElementById("app_version");
+        if (appVersionEl) {
+          appVersionEl.textContent = `v${UI_VERSION}`;
+          appVersionEl.title = `build ${UI_BUILD}`;
+        }
+    
     const UI_BUILD = "2026-02-08T10:50:32Z";
-    const versionBadge = document.getElementById("version_badge");
-    if (versionBadge) versionBadge.textContent = `v ${UI_BUILD}`;
 
     function updateKeyboardClass() {
       const vv = window.visualViewport;
@@ -338,6 +366,14 @@ HTML_TEMPLATE = """
       const isEditing = tag === "input" || tag === "select" || tag === "textarea";
 
       const openByViewport = vv ? (ratio < 0.78) : false;
+
+            // Keep the version pill inside the visual viewport on mobile (iOS keyboard can cover fixed UI).
+            if (appVersionEl && window.visualViewport) {
+              const vv = window.visualViewport;
+              const overlap = Math.max(0, (window.innerHeight || 0) - (vv.height + vv.offsetTop));
+              appVersionEl.style.transform = overlap > 0 ? `translateY(${-overlap}px)` : "";
+            }
+      
       document.body.classList.toggle("kbd-open", Boolean(isEditing && openByViewport) || (!vv && isEditing));
     }
 
@@ -676,6 +712,7 @@ HTML_TEMPLATE = """
     applyEnabledState();
     updateFrom(0);
   </script>
+  <div class="app-version" id="app_version"></div>
 </body>
 </html>
 """
