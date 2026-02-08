@@ -447,6 +447,7 @@
 
       rateTypeSelect.addEventListener("change", () => {
         applyEnabledState(ratesByType, fields);
+        renderMeta(data, ratesByType);
         
         renderMeta(data, ratesByType);const sourceIndex = Math.min(lastEditedIndex, activeCount - 1);
         updateFrom(ratesByType, fields, sourceIndex);
@@ -472,9 +473,7 @@
       applyEnabledState(ratesByType, fields);
       updateFrom(ratesByType, fields, 0);
 
-      meta.innerHTML =
-        `환율 기준: <strong>${rateTypeSelect.options[rateTypeSelect.selectedIndex].textContent}</strong><br/>` +
-        `데이터: 네이버 환율표 (업데이트: ${data.fetched_at || "-"})`;
+      renderMeta(data, ratesByType);
     }).catch((e) => {
       errorEl.style.display = "block";
       errorEl.textContent = `환율 데이터를 불러오지 못했습니다: ${e.message}`;

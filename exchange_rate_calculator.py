@@ -260,7 +260,7 @@ HTML_TEMPLATE = """
           </div>
           <div>
             <label for="amount_{{ idx }}">금액</label>
-            <input id="amount_{{ idx }}" class="amount-input" type="text" inputmode="decimal" value="0" placeholder="0" />
+            <input id="amount_{{ idx }}" class="amount-input" type="text" inputmode="decimal" value="0.00" placeholder="0.00" />
           </div>
         </div>
       {% endfor %}
@@ -368,9 +368,15 @@ HTML_TEMPLATE = """
     }
 
     function toInputValue(value) {
+      // Always show 2 decimals by default (ex: 0.00) for consistent readability.
       if (!Number.isFinite(value) || value < 0) {
-        return "0";
+        return "0.00";
       }
+      const normalized = value.toFixed(2);
+      const parts = normalized.split(".");
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return parts.join(".");
+    }
 
       // 소수점 4자리까지만 보여주고 불필요한 0은 제거
       const normalized = value.toFixed(4).replace(/\\.?0+$/, "");
@@ -540,7 +546,7 @@ HTML_TEMPLATE = """
         const parsed = parseEditableNumber(field.input.value);
         lastEditedIndex = index;
         if (parsed.empty) {
-          field.input.value = "0";
+          field.input.value = "0.00";
           updateFrom(index);
           return;
         }
