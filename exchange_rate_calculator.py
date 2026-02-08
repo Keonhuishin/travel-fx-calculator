@@ -260,7 +260,7 @@ HTML_TEMPLATE = """
           </div>
           <div>
             <label for="amount_{{ idx }}">금액</label>
-            <input id="amount_{{ idx }}" class="amount-input" type="text" inputmode="decimal" value="0" />
+            <input id="amount_{{ idx }}" class="amount-input" type="text" inputmode="decimal" value="0" placeholder="0" />
           </div>
         </div>
       {% endfor %}
@@ -332,11 +332,39 @@ HTML_TEMPLATE = """
       return fields[index].row.dataset.prevCode || fields[index].select.value;
     }
 
-    function asNumber(value) {
-      // 사용자가 넣은 천단위 콤마를 제거하고 숫자로 변환
+    function cleanEditableNumberText(value) {
+      // Keep a permissive "in-progress" decimal format while typing:
+      // - allow empty
+      // - allow "1.", ".5"
+      // - disallow negatives
+      // - strip thousands separators
       const cleaned = String(value).replace(/,/g, "").trim();
-      const n = Number.parseFloat(cleaned);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
+      if (cleaned === "") return "";
+      if (cleaned.includes("-")) return "";
+      if (!/^\\d*\\.?\\d*$/.test(cleaned)) return "";
+      return cleaned;
+    }
+
+    function parseEditableNumber(value) {
+      const cleaned = cleanEditableNumberText(value);
+      if (cleaned === "") return { empty: true, cleaned: "", number: 0 };
+      // "." alone should behave like "0." while editing.
+      const normalized = cleaned === "." ? "0." : cleaned;
+      const n = Number.parseFloat(normalized);
+      return { empty: false, cleaned: normalized, number: Number.isFinite(n) && n >= 0 ? n : 0 };
+    }
+
+    function formatEditableNumberText(cleaned) {
+      // cleaned: digits with optional '.' and fractional digits (no commas)
+      if (cleaned === "") return "";
+      const hasDot = cleaned.includes(".");
+      let [intPart, fracPart] = cleaned.split(".");
+      if (intPart === "") intPart = "0";
+      intPart = intPart.replace(/^0+(?=\\d)/, "");
+      intPart = intPart.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
+      if (!hasDot) return intPart;
+      if (fracPart === undefined) return `${intPart}.`;
+      return `${intPart}.${fracPart}`;
     }
 
     function toInputValue(value) {
@@ -349,6 +377,41 @@ HTML_TEMPLATE = """
       const parts = normalized.split(".");
       parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
       return parts.join(".");
+    }
+
+    function nonCommaIndex(text, caretPos) {
+      // caret 이전까지의 "콤마 제외" 문자 개수 (숫자/소수점 포함)
+      let count = 0;
+      for (let i = 0; i < Math.min(text.length, caretPos); i++) {
+        if (text[i] !== ",") count += 1;
+      }
+      return count;
+    }
+
+    function caretPosFromNonCommaIndex(text, idx) {
+      // "콤마 제외" 문자 idx개가 지나간 위치의 caret pos
+      if (idx <= 0) return 0;
+      let count = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] !== ",") count += 1;
+        if (count >= idx) return i + 1;
+      }
+      return text.length;
+    }
+
+    function setValuePreserveCaret(inputEl, formatted, oldText, oldCaret) {
+      // 포맷으로 input.value를 덮어써도 커서 위치가 유지되도록 매핑합니다.
+      const idx = nonCommaIndex(oldText, oldCaret ?? oldText.length);
+      inputEl.value = formatted;
+      const pos = caretPosFromNonCommaIndex(inputEl.value, idx);
+      try { inputEl.setSelectionRange(pos, pos); } catch { /* ignore */ }
+    }
+
+    function selectAllSoon(inputEl) {
+      // 모바일 브라우저는 focus 직후 selection 설정이 씹히는 경우가 있어 tick을 한 번 넘깁니다.
+      setTimeout(() => {
+        try { inputEl.setSelectionRange(0, inputEl.value.length); } catch { /* ignore */ }
+      }, 0);
     }
 
     function convertAmount(amount, fromCode, toCode) {
@@ -369,7 +432,7 @@ HTML_TEMPLATE = """
       });
     }
 
-    function updateFrom(index) {
+    function updateFrom(index, preserveSourceCaret = false, sourceOldText = "", sourceOldCaret = 0) {
       if (isSyncing) {
         return;
       }
@@ -383,8 +446,17 @@ HTML_TEMPLATE = """
         return;
       }
       const sourceCode = source.select.value;
-      const sourceAmount = asNumber(source.input.value);
-      source.input.value = toInputValue(sourceAmount);
+      const parsed = parseEditableNumber(source.input.value);
+      if (parsed.empty) {
+        // If user cleared the field, keep it empty and clear dependent fields.
+        activeFields.forEach((f, i) => { if (i !== index) f.input.value = ""; });
+        isSyncing = false;
+        return;
+      }
+      const sourceAmount = parsed.number;
+      const sourceFormatted = formatEditableNumberText(parsed.cleaned);
+      if (preserveSourceCaret) setValuePreserveCaret(source.input, sourceFormatted, sourceOldText, sourceOldCaret);
+      else source.input.value = sourceFormatted;
 
       activeFields.forEach((field, i) => {
         if (i === index) {
@@ -444,9 +516,20 @@ HTML_TEMPLATE = """
 
     // 환율이 부분적으로만 있어도 UI는 조작 가능하게 유지합니다.
     fields.forEach((field, index) => {
-      field.input.addEventListener("input", () => {
+      field.input.addEventListener("focus", () => {
+        // 요구사항: 어디를 클릭해도 항상 맨 왼쪽부터(전체 선택 후 덮어쓰기)
         lastEditedIndex = index;
-        updateFrom(index);
+        selectAllSoon(field.input);
+      });
+      field.input.addEventListener("click", () => {
+        lastEditedIndex = index;
+        selectAllSoon(field.input);
+      });
+      field.input.addEventListener("input", () => {
+        const oldText = field.input.value;
+        const oldCaret = field.input.selectionStart ?? oldText.length;
+        lastEditedIndex = index;
+        updateFrom(index, true, oldText, oldCaret);
       });
       field.select.addEventListener("change", () => {
         const oldCode = getPrevCode(index);
@@ -458,7 +541,7 @@ HTML_TEMPLATE = """
         // - 마지막 입력 칸이 '바로 이 칸'이면: 동일 가치(원화 환산)를 유지한 채 표기 통화만 변경.
         if (index === lastEditedIndex) {
           const r = currentRates();
-          const amountOld = asNumber(field.input.value);
+          const amountOld = parseEditableNumber(field.input.value).number;
           const krwValue = amountOld * r[oldCode];
           const amountNew = krwValue / r[newCode];
           field.input.value = toInputValue(amountNew);

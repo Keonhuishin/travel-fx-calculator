@@ -169,10 +169,39 @@
     const meta = document.getElementById("meta");
     const errorEl = document.getElementById("error");
 
-    function asNumber(value) {
+    function cleanEditableNumberText(value) {
+      // Keep a permissive "in-progress" decimal format while typing:
+      // - allow empty
+      // - allow "1.", ".5"
+      // - disallow negatives
+      // - strip thousands separators
       const cleaned = String(value).replace(/,/g, "").trim();
-      const n = Number.parseFloat(cleaned);
-      return Number.isFinite(n) && n >= 0 ? n : 0;
+      if (cleaned === "") return "";
+      if (cleaned.includes("-")) return "";
+      if (!/^\d*\.?\d*$/.test(cleaned)) return "";
+      return cleaned;
+    }
+
+    function parseEditableNumber(value) {
+      const cleaned = cleanEditableNumberText(value);
+      if (cleaned === "") return { empty: true, cleaned: "", number: 0 };
+      // "." alone should behave like "0." while editing.
+      const normalized = cleaned === "." ? "0." : cleaned;
+      const n = Number.parseFloat(normalized);
+      return { empty: false, cleaned: normalized, number: Number.isFinite(n) && n >= 0 ? n : 0 };
+    }
+
+    function formatEditableNumberText(cleaned) {
+      // cleaned: digits with optional '.' and fractional digits (no commas)
+      if (cleaned === "") return "";
+      const hasDot = cleaned.includes(".");
+      let [intPart, fracPart] = cleaned.split(".");
+      if (intPart === "") intPart = "0";
+      intPart = intPart.replace(/^0+(?=\d)/, "");
+      intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (!hasDot) return intPart;
+      if (fracPart === undefined) return `${intPart}.`;
+      return `${intPart}.${fracPart}`;
     }
 
     function toInputValue(value) {
@@ -181,6 +210,37 @@
       const parts = normalized.split(".");
       parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
       return parts.join(".");
+    }
+
+    function nonCommaIndex(text, caretPos) {
+      let count = 0;
+      for (let i = 0; i < Math.min(text.length, caretPos); i++) {
+        if (text[i] !== ",") count += 1;
+      }
+      return count;
+    }
+
+    function caretPosFromNonCommaIndex(text, idx) {
+      if (idx <= 0) return 0;
+      let count = 0;
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] !== ",") count += 1;
+        if (count >= idx) return i + 1;
+      }
+      return text.length;
+    }
+
+    function setValuePreserveCaret(inputEl, formatted, oldText, oldCaret) {
+      const idx = nonCommaIndex(oldText, oldCaret ?? oldText.length);
+      inputEl.value = formatted;
+      const pos = caretPosFromNonCommaIndex(inputEl.value, idx);
+      try { inputEl.setSelectionRange(pos, pos); } catch { /* ignore */ }
+    }
+
+    function selectAllSoon(inputEl) {
+      setTimeout(() => {
+        try { inputEl.setSelectionRange(0, inputEl.value.length); } catch { /* ignore */ }
+      }, 0);
     }
 
     function buildRow(i, currencies, flags) {
@@ -224,6 +284,7 @@
       inp.inputMode = "decimal";
       inp.id = `amount_${i + 1}`;
       inp.value = "0";
+      inp.placeholder = "0";
 
       right.appendChild(label2);
       right.appendChild(inp);
@@ -267,7 +328,7 @@
       return ok;
     }
 
-    function updateFrom(ratesByType, fields, index) {
+    function updateFrom(ratesByType, fields, index, preserveSourceCaret = false, sourceOldText = "", sourceOldCaret = 0) {
       if (isSyncing) return;
       isSyncing = true;
 
@@ -275,8 +336,17 @@
       const source = activeFields[index];
       if (!source) { isSyncing = false; return; }
       const sourceCode = source.sel.value;
-      const sourceAmount = asNumber(source.inp.value);
-      source.inp.value = toInputValue(sourceAmount);
+      const parsed = parseEditableNumber(source.inp.value);
+      if (parsed.empty) {
+        // If user cleared the field, keep it empty and clear dependent fields.
+        activeFields.forEach((f, i) => { if (i !== index) f.inp.value = ""; });
+        isSyncing = false;
+        return;
+      }
+      const sourceAmount = parsed.number;
+      const sourceFormatted = formatEditableNumberText(parsed.cleaned);
+      if (preserveSourceCaret) setValuePreserveCaret(source.inp, sourceFormatted, sourceOldText, sourceOldCaret);
+      else source.inp.value = sourceFormatted;
 
       activeFields.forEach((f, i) => {
         if (i === index) return;
@@ -311,7 +381,14 @@
       fields.forEach((f, i) => setPrevCode(i, f.sel.value));
 
       fields.forEach((f, idx) => {
-        f.inp.addEventListener("input", () => { lastEditedIndex = idx; updateFrom(ratesByType, fields, idx); });
+        f.inp.addEventListener("focus", () => { lastEditedIndex = idx; selectAllSoon(f.inp); });
+        f.inp.addEventListener("click", () => { lastEditedIndex = idx; selectAllSoon(f.inp); });
+        f.inp.addEventListener("input", () => {
+          const oldText = f.inp.value;
+          const oldCaret = f.inp.selectionStart ?? oldText.length;
+          lastEditedIndex = idx;
+          updateFrom(ratesByType, fields, idx, true, oldText, oldCaret);
+        });
         f.sel.addEventListener("change", () => {
           const oldCode = getPrevCode(idx);
           const newCode = f.sel.value;
@@ -319,16 +396,16 @@
           const ok = applyEnabledState(ratesByType, fields);
           if (!ok) return;
 
-          if (idx === lastEditedIndex) {
-            const r = currentRates(ratesByType);
-            const amountOld = asNumber(f.inp.value);
-            const krwValue = amountOld * r[oldCode];
-            const amountNew = krwValue / r[newCode];
-            f.inp.value = toInputValue(amountNew);
-            setPrevCode(idx, newCode);
-            updateFrom(ratesByType, fields, idx);
-            return;
-          }
+        if (idx === lastEditedIndex) {
+          const r = currentRates(ratesByType);
+          const amountOld = parseEditableNumber(f.inp.value).number;
+          const krwValue = amountOld * r[oldCode];
+          const amountNew = krwValue / r[newCode];
+          f.inp.value = toInputValue(amountNew);
+          setPrevCode(idx, newCode);
+          updateFrom(ratesByType, fields, idx);
+          return;
+        }
 
           setPrevCode(idx, newCode);
           const sourceIndex = Math.min(lastEditedIndex, activeCount - 1);
@@ -372,4 +449,3 @@
   </script>
 </body>
 </html>
-
