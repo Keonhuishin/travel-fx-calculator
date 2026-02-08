@@ -1,6 +1,7 @@
 {
-  "fetched_at": "2026-02-08T11:48:38+00:00",
+  "fetched_at": "2026-02-08T12:24:01+00:00",
   "source": "https://finance.naver.com/marketindex/exchangeList.naver",
+  "build_sha": "",
   "rates_by_type": {
     "sale": {
       "KRW": 1.0,
@@ -66,62 +67,52 @@
   "currencies": [
     {
       "code": "KRW",
-      "label": "대한민국 원화 (KRW)",
-      "flag": "🇰🇷",
+      "label": "Korean Won (KRW)",
       "source_unit": 1
     },
     {
       "code": "USD",
-      "label": "미국 달러 (USD)",
-      "flag": "🇺🇸",
+      "label": "US Dollar (USD)",
       "source_unit": 1
     },
     {
       "code": "CNY",
-      "label": "중국 위안 (CNY)",
-      "flag": "🇨🇳",
+      "label": "Chinese Yuan (CNY)",
       "source_unit": 1
     },
     {
       "code": "PHP",
-      "label": "필리핀 페소 (PHP)",
-      "flag": "🇵🇭",
+      "label": "Philippine Peso (PHP)",
       "source_unit": 1
     },
     {
       "code": "TWD",
-      "label": "대만 달러 (TWD)",
-      "flag": "🇹🇼",
+      "label": "Taiwan Dollar (TWD)",
       "source_unit": 1
     },
     {
       "code": "JPY",
-      "label": "일본 엔 (JPY)",
-      "flag": "🇯🇵",
+      "label": "Japanese Yen (JPY)",
       "source_unit": 100
     },
     {
       "code": "VND",
-      "label": "베트남 동 (VND)",
-      "flag": "🇻🇳",
+      "label": "Vietnamese Dong (VND)",
       "source_unit": 100
     },
     {
       "code": "THB",
-      "label": "태국 바트 (THB)",
-      "flag": "🇹🇭",
+      "label": "Thai Baht (THB)",
       "source_unit": 1
     },
     {
       "code": "EUR",
-      "label": "유로 (EUR)",
-      "flag": "🇪🇺",
+      "label": "Euro (EUR)",
       "source_unit": 1
     },
     {
       "code": "AUD",
-      "label": "호주 달러 (AUD)",
-      "flag": "🇦🇺",
+      "label": "Australian Dollar (AUD)",
       "source_unit": 1
     }
   ]

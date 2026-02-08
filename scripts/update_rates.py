@@ -1,17 +1,18 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Fetch Naver exchange rates and write a snapshot for GitHub Pages.
 
 Writes: docs/data/rates.json
 Data source: https://finance.naver.com/marketindex/exchangeList.naver
 
 Notes:
-- Naver page provides columns: sale(매매기준율), cash buy/sell, remittance send/receive.
+- Naver page provides columns: mid-market, cash buy/sell, remit send/receive.
 - JPY/VND are shown per 100 units; we normalize to 1 unit.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -21,17 +22,18 @@ from urllib.request import Request, urlopen
 
 NAVER_EXCHANGE_LIST_URL = "https://finance.naver.com/marketindex/exchangeList.naver"
 
+# Keep everything ASCII in the snapshot to avoid mojibake across environments.
 CURRENCY_META: dict[str, dict[str, object]] = {
-    "KRW": {"label": "대한민국 원화 (KRW)", "flag": "🇰🇷", "market_code": None, "source_unit": 1},
-    "USD": {"label": "미국 달러 (USD)", "flag": "🇺🇸", "market_code": "FX_USDKRW", "source_unit": 1},
-    "CNY": {"label": "중국 위안 (CNY)", "flag": "🇨🇳", "market_code": "FX_CNYKRW", "source_unit": 1},
-    "PHP": {"label": "필리핀 페소 (PHP)", "flag": "🇵🇭", "market_code": "FX_PHPKRW", "source_unit": 1},
-    "TWD": {"label": "대만 달러 (TWD)", "flag": "🇹🇼", "market_code": "FX_TWDKRW", "source_unit": 1},
-    "JPY": {"label": "일본 엔 (JPY)", "flag": "🇯🇵", "market_code": "FX_JPYKRW", "source_unit": 100},
-    "VND": {"label": "베트남 동 (VND)", "flag": "🇻🇳", "market_code": "FX_VNDKRW", "source_unit": 100},
-    "THB": {"label": "태국 바트 (THB)", "flag": "🇹🇭", "market_code": "FX_THBKRW", "source_unit": 1},
-    "EUR": {"label": "유로 (EUR)", "flag": "🇪🇺", "market_code": "FX_EURKRW", "source_unit": 1},
-    "AUD": {"label": "호주 달러 (AUD)", "flag": "🇦🇺", "market_code": "FX_AUDKRW", "source_unit": 1},
+    "KRW": {"label": "Korean Won (KRW)", "market_code": None, "source_unit": 1},
+    "USD": {"label": "US Dollar (USD)", "market_code": "FX_USDKRW", "source_unit": 1},
+    "CNY": {"label": "Chinese Yuan (CNY)", "market_code": "FX_CNYKRW", "source_unit": 1},
+    "PHP": {"label": "Philippine Peso (PHP)", "market_code": "FX_PHPKRW", "source_unit": 1},
+    "TWD": {"label": "Taiwan Dollar (TWD)", "market_code": "FX_TWDKRW", "source_unit": 1},
+    "JPY": {"label": "Japanese Yen (JPY)", "market_code": "FX_JPYKRW", "source_unit": 100},
+    "VND": {"label": "Vietnamese Dong (VND)", "market_code": "FX_VNDKRW", "source_unit": 100},
+    "THB": {"label": "Thai Baht (THB)", "market_code": "FX_THBKRW", "source_unit": 1},
+    "EUR": {"label": "Euro (EUR)", "market_code": "FX_EURKRW", "source_unit": 1},
+    "AUD": {"label": "Australian Dollar (AUD)", "market_code": "FX_AUDKRW", "source_unit": 1},
 }
 
 
@@ -104,12 +106,15 @@ def fetch_snapshot() -> Snapshot:
 
 def main() -> None:
     snap = fetch_snapshot()
+    build_sha = (os.getenv("GITHUB_SHA") or "")[:7]
+
     out = {
         "fetched_at": snap.fetched_at,
         "source": NAVER_EXCHANGE_LIST_URL,
+        "build_sha": build_sha,
         "rates_by_type": snap.rates_by_type,
         "currencies": [
-            {"code": code, "label": meta["label"], "flag": meta["flag"], "source_unit": meta["source_unit"]}
+            {"code": code, "label": meta["label"], "source_unit": meta["source_unit"]}
             for code, meta in CURRENCY_META.items()
         ],
     }
@@ -121,4 +126,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
