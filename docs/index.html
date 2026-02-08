@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
@@ -85,7 +85,7 @@
     }
     .currency-row { display: flex; align-items: center; gap: 10px; }
     .flag-big { width: 34px; text-align: center; font-size: 22px; line-height: 1; user-select: none; }
-    \.field input, \.field select {`r`n      font-variant-numeric: tabular-nums;`r`n      text-align: right;
+    .field input, .field select {
       width: 100%;
       border: 1px solid #c9dafd;
       border-radius: 10px;
@@ -205,7 +205,7 @@
     }
 
     function toInputValue(value) {
-      // Always show 2 decimals by default (ex: 0.00) for consistent readability.
+      // Default display is always 2 decimals (ex: 0.00).
       if (!Number.isFinite(value) || value < 0) return "0.00";
       const normalized = value.toFixed(2);
       const parts = normalized.split(".");
@@ -329,7 +329,7 @@
       return ok;
     }
 
-    
+
     function formatRateValue(value) {
       // For rate display, 4 decimals is useful for smaller currencies (ex: JPY/VND).
       if (!Number.isFinite(value) || value <= 0) return "-";
@@ -347,7 +347,17 @@
         .map((c) => `${c.flag} 1 ${c.code} = ${formatRateValue(r[c.code])} KRW`)
         .join("<br/>");
 
-      renderMeta(data, ratesByType);
+      meta.innerHTML =
+        `환율 기준: <strong>${typeLabel}</strong><br/>` +
+        `업데이트: ${data.fetched_at || "-"}<br/><br/>` +
+        `${lines}`;
+    }
+
+    function updateFrom(ratesByType, fields, index, preserveSourceCaret = false, sourceOldText = "", sourceOldCaret = 0) {
+      if (isSyncing) return;
+      isSyncing = true;
+
+      const activeFields = fields.slice(0, activeCount);
       const source = activeFields[index];
       if (!source) { isSyncing = false; return; }
       const sourceCode = source.sel.value;
@@ -448,8 +458,7 @@
       rateTypeSelect.addEventListener("change", () => {
         applyEnabledState(ratesByType, fields);
         renderMeta(data, ratesByType);
-        
-        renderMeta(data, ratesByType);const sourceIndex = Math.min(lastEditedIndex, activeCount - 1);
+        const sourceIndex = Math.min(lastEditedIndex, activeCount - 1);
         updateFrom(ratesByType, fields, sourceIndex);
       });
       addFieldBtn.addEventListener("click", () => {
@@ -481,8 +490,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-

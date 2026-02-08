@@ -368,13 +368,13 @@ HTML_TEMPLATE = """
     }
 
     function toInputValue(value) {
-      // Always show 2 decimals by default (ex: 0.00) for consistent readability.
+      // Default display is always 2 decimals (ex: 0.00).
       if (!Number.isFinite(value) || value < 0) {
         return "0.00";
       }
       const normalized = value.toFixed(2);
       const parts = normalized.split(".");
-      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
       return parts.join(".");
     }
 
