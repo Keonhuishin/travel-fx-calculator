@@ -469,12 +469,25 @@
 
     function renderMeta(data) {
       const typeLabel = rateTypeSelect.options[rateTypeSelect.selectedIndex]?.textContent ?? "";
-      const sourceText = data.source ? `출처: 네이버 금융 (${data.source})` : "출처: 네이버 금융";
 
-      meta.innerHTML =
-        `환율 기준: <strong>${typeLabel}</strong><br/>` +
-        `업데이트: ${data.fetched_at || "-"}<br/>` +
-        sourceText;
+      // Avoid innerHTML: keep meta text-only even if the snapshot content changes.
+      meta.replaceChildren();
+
+      const line1 = document.createElement("div");
+      line1.appendChild(document.createTextNode("?? ??: "));
+      const strong = document.createElement("strong");
+      strong.textContent = typeLabel;
+      line1.appendChild(strong);
+
+      const line2 = document.createElement("div");
+      line2.textContent = `????: ${data.fetched_at || "-"}`;
+
+      const line3 = document.createElement("div");
+      line3.textContent = data.source ? `??: ??? ?? (${data.source})` : "??: ??? ??";
+
+      meta.appendChild(line1);
+      meta.appendChild(line2);
+      meta.appendChild(line3);
     }
 
 
