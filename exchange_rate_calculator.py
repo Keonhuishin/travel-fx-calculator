@@ -337,7 +337,7 @@ HTML_TEMPLATE = """
     {% endif %}
   </main>
 
-  <div class="app-version" id="app_version"></div>
+  <div class="app-version" id="app_version">v6cce2c3</div>
 
   <script>
     // 서버에서 내려준 KRW 기준 환율표(기준 타입별).
@@ -361,7 +361,7 @@ HTML_TEMPLATE = """
 
 
     
-            const DEFAULT_UI_VERSION = '2a8020a';
+            const DEFAULT_UI_VERSION = '6cce2c3';
     const UI_VERSION = (new URLSearchParams(window.location.search)).get('v') || DEFAULT_UI_VERSION;
 const appVersionEl = document.getElementById("app_version");
         if (appVersionEl) {
@@ -895,6 +895,7 @@ if __name__ == "__main__":
     debug = os.getenv("DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}
 
     app.run(host=host, port=port, debug=debug)
+
 
 
 
