@@ -15,7 +15,7 @@ const MIN_FIELDS = 1;
 const MAX_FIELDS = 5;
 
 // Pretty version label for UX (semver-ish). Override with ?ver=1.3.5
-const UI_SEMVER = "1.3.4";
+const UI_SEMVER = "1.3.5";
 
 const CODE_LABEL = {
   USD: "미국 달러 (USD)",
@@ -522,5 +522,6 @@ loadSnapshot()\n  .then((data) => {\n    if (errorEl) { errorEl.style.display = 
     }
     setVersionPill(null);
   });
+
 
 
