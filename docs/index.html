@@ -76,12 +76,17 @@
       align-items: end;
     }
     .field.hidden { display: none; }
-    .field label {
-      display: block;
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 8px;
-      font-weight: 800;
+    /* Labels are kept for accessibility but hidden from the visual UI. */
+    .sr-only {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
     }
     .currency-row { display: flex; align-items: center; gap: 10px; }
     .flag-big {
@@ -281,8 +286,6 @@
       const left = document.createElement("div");
       const right = document.createElement("div");
 
-      const label1 = document.createElement("label");
-      label1.textContent = "통화";
       const wrap = document.createElement("div");
       wrap.className = "currency-row";
       const flag = document.createElement("img");
@@ -295,7 +298,7 @@
 
       const sel = document.createElement("select");
       sel.id = `currency_${i + 1}`;
-      label1.htmlFor = sel.id;
+      sel.setAttribute("aria-label", "통화");
       currencies.forEach((c) => {
         const opt = document.createElement("option");
         opt.value = c.code;
@@ -306,20 +309,16 @@
 
       wrap.appendChild(flag);
       wrap.appendChild(sel);
-      left.appendChild(label1);
       left.appendChild(wrap);
 
-      const label2 = document.createElement("label");
-      label2.textContent = "금액";
-      label2.htmlFor = `amount_${i + 1}`;
       const inp = document.createElement("input");
       inp.type = "text";
       inp.inputMode = "decimal";
       inp.id = `amount_${i + 1}`;
+      inp.setAttribute("aria-label", "금액");
       inp.value = "0.00";
       inp.placeholder = "0.00";
 
-      right.appendChild(label2);
       right.appendChild(inp);
 
       row.appendChild(left);

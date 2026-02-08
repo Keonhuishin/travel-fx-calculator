@@ -60,6 +60,17 @@ HTML_TEMPLATE = """
       --error-text: #8a1f1f;
     }
     * { box-sizing: border-box; }
+    .sr-only {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
     html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
@@ -248,7 +259,7 @@ HTML_TEMPLATE = """
       {% for idx in range(1, 5) %}
         <div class="field field-row" data-index="{{ idx - 1 }}">
           <div>
-            <label for="currency_{{ idx }}">통화</label>
+            <label class="sr-only" for="currency_{{ idx }}">통화</label>
             <div class="currency-row">
               <img class="flag-big" id="flag_{{ idx }}" alt="" decoding="async" loading="lazy" />
               <select id="currency_{{ idx }}" class="currency-select">
@@ -259,7 +270,7 @@ HTML_TEMPLATE = """
             </div>
           </div>
           <div>
-            <label for="amount_{{ idx }}">금액</label>
+            <label class="sr-only" for="amount_{{ idx }}">금액</label>
             <input id="amount_{{ idx }}" class="amount-input" type="text" inputmode="decimal" value="0.00" placeholder="0.00" />
           </div>
         </div>
