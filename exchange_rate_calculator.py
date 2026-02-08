@@ -1,12 +1,19 @@
 ﻿#!/usr/bin/env python3
 
-"""네이버 환율을 기반으로 다중 통화를 변환하는 Flask 웹 앱."""
+"""네이버 환율을 기반으로 다중 통화를 변환하는 Flask 웹 앱.
+
+핵심 포인트:
+- 네이버 금융 환율표는 "매매기준율/현찰(사실 때/파실 때)/송금(보내실 때/받으실 때)"를 각각 제공합니다.
+- 통화 A -> 통화 B 변환은 같은 '기준 컬럼'을 사용해 원화(KRW) 기준으로 교차환산합니다.
+  이는 일반적인 크로스레이트 계산 방식이며, 실제 은행 거래 금액은 스프레드/수수료로 달라질 수 있습니다.
+"""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+import json
+from datetime import date, datetime, timedelta
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -15,25 +22,24 @@ from flask import Flask, render_template_string
 app = Flask(__name__)
 
 NAVER_EXCHANGE_LIST_URL = "https://finance.naver.com/marketindex/exchangeList.naver"
+EXCHANGERATE_TIMESERIES_URL = "https://api.exchangerate.host/timeseries"
 
-# `usd_pairs`:
-# - (market_code, is_inverse, unit) 형식입니다.
-# - market_code 값이 "기준통화 1단위당 상대통화"가 아닐 때는 is_inverse=True로 역수를 사용합니다.
-# - 일부 통화는 100단위 기준으로 노출될 수 있어 unit으로 1단위 환산합니다.
+# 간단 캐시(과도한 외부 호출 방지). 프로세스 재시작 시 초기화됩니다.
+_HIST_CACHE: dict[str, tuple[datetime, list[tuple[str, float]]]] = {}
+
+# `source_unit`:
+# - JPY/VND는 네이버에서 100단위 기준으로 제공되므로 1단위로 환산하기 위해 사용합니다.
+# - 나머지는 1단위 기준 환율입니다.
 CURRENCY_META = {
-    "KRW": {
-        "label": "대한민국 원화 (KRW)",
-        "flag": "🇰🇷",
-        "usd_pairs": [("FX_USDKRW", False, 1)],
-    },
-    "USD": {"label": "미국 달러 (USD)", "flag": "🇺🇸", "usd_pairs": []},
-    "PHP": {"label": "필리핀 페소 (PHP)", "flag": "🇵🇭", "usd_pairs": [("FX_USDPHP", False, 1), ("FX_PHPUSD", True, 1)]},
-    "TWD": {"label": "대만 달러 (TWD)", "flag": "🇹🇼", "usd_pairs": [("FX_USDTWD", False, 1), ("FX_TWDUSD", True, 1)]},
-    "JPY": {"label": "일본 엔화 (JPY)", "flag": "🇯🇵", "usd_pairs": [("FX_USDJPY", False, 1), ("FX_JPYUSD", True, 1)]},
-    "VND": {"label": "베트남 동 (VND)", "flag": "🇻🇳", "usd_pairs": [("FX_USDVND", False, 1), ("FX_VNDUSD", True, 1)]},
-    "THB": {"label": "태국 바트 (THB)", "flag": "🇹🇭", "usd_pairs": [("FX_USDTHB", False, 1), ("FX_THBUSD", True, 1)]},
-    "EUR": {"label": "유로 (EUR)", "flag": "🇪🇺", "usd_pairs": [("FX_USDEUR", False, 1), ("FX_EURUSD", True, 1)]},
-    "AUD": {"label": "호주 달러 (AUD)", "flag": "🇦🇺", "usd_pairs": [("FX_USDAUD", False, 1), ("FX_AUDUSD", True, 1)]},
+    "KRW": {"label": "대한민국 원화 (KRW)", "flag": "🇰🇷", "market_code": None, "source_unit": 1},
+    "USD": {"label": "미국 달러 (USD)", "flag": "🇺🇸", "market_code": "FX_USDKRW", "source_unit": 1},
+    "PHP": {"label": "필리핀 페소 (PHP)", "flag": "🇵🇭", "market_code": "FX_PHPKRW", "source_unit": 1},
+    "TWD": {"label": "대만 달러 (TWD)", "flag": "🇹🇼", "market_code": "FX_TWDKRW", "source_unit": 1},
+    "JPY": {"label": "일본 엔화 (JPY)", "flag": "🇯🇵", "market_code": "FX_JPYKRW", "source_unit": 100},
+    "VND": {"label": "베트남 동 (VND)", "flag": "🇻🇳", "market_code": "FX_VNDKRW", "source_unit": 100},
+    "THB": {"label": "태국 바트 (THB)", "flag": "🇹🇭", "market_code": "FX_THBKRW", "source_unit": 1},
+    "EUR": {"label": "유로 (EUR)", "flag": "🇪🇺", "market_code": "FX_EURKRW", "source_unit": 1},
+    "AUD": {"label": "호주 달러 (AUD)", "flag": "🇦🇺", "market_code": "FX_AUDKRW", "source_unit": 1},
 }
 
 HTML_TEMPLATE = """
@@ -101,6 +107,16 @@ HTML_TEMPLATE = """
     .toolbar button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    .toolbar select {
+      border: 1px solid #c9dafd;
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      font-weight: 700;
+      padding: 8px 12px;
+      min-height: 44px;
+      font-size: 14px;
     }
     .toolbar .count {
       font-size: 13px;
@@ -193,6 +209,38 @@ HTML_TEMPLATE = """
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
+    .history {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 12px;
+    }
+    .history h2 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+    .history .meme {
+      font-weight: 800;
+      color: #142a57;
+      margin: 6px 0 10px;
+    }
+    .history details {
+      margin-top: 8px;
+    }
+    .history table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .history th, .history td {
+      border-top: 1px solid #eef3ff;
+      padding: 8px 6px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .history th:first-child, .history td:first-child { text-align: left; }
     .error {
       margin-top: 14px;
       border: 1px solid var(--error-line);
@@ -223,6 +271,13 @@ HTML_TEMPLATE = """
     <section class="toolbar">
       <button type="button" id="add_field">+ 칸 추가</button>
       <button type="button" id="remove_field">- 칸 제거</button>
+      <select id="rate_type">
+        <option value="sale" selected>매매기준율</option>
+        <option value="buy">현찰 사실 때</option>
+        <option value="sell">현찰 파실 때</option>
+        <option value="send">송금 보내실 때</option>
+        <option value="receive">송금 받으실 때</option>
+      </select>
       <span class="count" id="field_count_text"></span>
     </section>
 
@@ -248,13 +303,35 @@ HTML_TEMPLATE = """
     <section class="meta">
       <div>환율 기준 시각: {{ rate_time_text }}</div>
       <div>
-        적용 환율(매매기준율, USD 페어 기준):
-        {% for item in currencies if item.code != "USD" %}
-          <span>{{ item.flag }} 1 USD = {{ "{:,.4f}".format(usd_rates[item.code]) }} {{ item.code }}{% if not loop.last %}, {% endif %}</span>
+        적용 환율(선택 기준, KRW 기준):
+        {% for item in currencies if item.code != "KRW" %}
+          <span>{{ item.flag }} 1 {{ item.code }} = {{ "{:,.4f}".format(rates_by_type["sale"][item.code]) }} KRW (매매기준율){% if not loop.last %}, {% endif %}</span>
         {% endfor %}
       </div>
-      <div>환율 종류: 네이버 금융의 <strong>매매기준율</strong>을 사용합니다. 통화 간 계산은 KRW 경유가 아니라 USD 페어 환율을 기준으로 계산합니다.</div>
-      <div>참고: 실제 은행 거래(살 때/팔 때/송금)는 스프레드와 수수료로 인해 결과가 달라질 수 있습니다.</div>
+      <div>환율 종류: 네이버 금융의 <strong>매매기준율/현찰/송금</strong> 중 하나를 선택합니다. 변환은 선택된 기준을 동일하게 적용해 교차환산합니다.</div>
+      <div>참고: JPY, VND는 네이버의 100단위 기준 값을 1단위 기준으로 환산해 적용합니다.</div>
+    </section>
+
+    <section class="history">
+      <h2>최근 6개월 USD/KRW (일자별, 참고용)</h2>
+      <div class="meme">{{ hist_meme }}</div>
+      <div class="meta">
+        데이터 소스: exchangerate.host (시장환율 계열, 은행 거래 환율과 다를 수 있음)<br/>
+        기간: {{ hist_start }} ~ {{ hist_end }} ({{ hist_count }}일)
+      </div>
+      <details>
+        <summary>일자별 보기</summary>
+        <table>
+          <thead>
+            <tr><th>일자</th><th>USD/KRW</th></tr>
+          </thead>
+          <tbody>
+            {% for d, v in hist_series %}
+              <tr><td>{{ d }}</td><td>{{ "{:,.4f}".format(v) }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
     </section>
 
     {% if error %}
@@ -263,8 +340,9 @@ HTML_TEMPLATE = """
   </main>
 
   <script>
-    // 서버에서 내려준 USD 페어 환율표. 예: usdRates["JPY"] = 1 USD 당 JPY
-    const usdRates = {{ usd_rates | tojson }};
+    // 서버에서 내려준 KRW 기준 환율표(기준 타입별).
+    // 예: ratesByType["sale"]["USD"] = 1 USD 당 KRW (매매기준율)
+    const ratesByType = {{ rates_by_type | tojson }};
     const rowElements = Array.from(document.querySelectorAll(".field-row"));
     const fields = rowElements.map((row, index) => ({
       row,
@@ -274,12 +352,21 @@ HTML_TEMPLATE = """
     }));
     const addFieldBtn = document.getElementById("add_field");
     const removeFieldBtn = document.getElementById("remove_field");
+    const rateTypeSelect = document.getElementById("rate_type");
     const fieldCountText = document.getElementById("field_count_text");
     const MIN_FIELDS = 1;
     const MAX_FIELDS = 4;
     let activeCount = 3;
 
-    const canConvert = Object.values(usdRates).every((v) => Number.isFinite(v) && v > 0);
+    function currentRates() {
+      const t = rateTypeSelect.value;
+      return ratesByType[t] || ratesByType["sale"];
+    }
+
+    function canConvertNow() {
+      const r = currentRates();
+      return Object.values(r).every((v) => Number.isFinite(v) && v > 0);
+    }
     // 입력 이벤트가 연쇄적으로 재호출되는 것을 방지하는 락
     let isSyncing = false;
 
@@ -306,9 +393,10 @@ HTML_TEMPLATE = """
       if (fromCode === toCode) {
         return amount;
       }
-      // from -> USD -> to 방식으로 계산 (USD 페어 직접환율 기반)
-      const inUsd = amount / usdRates[fromCode];
-      return inUsd * usdRates[toCode];
+      // from -> KRW -> to 방식으로 계산 (선택한 기준 타입을 동일하게 적용)
+      const r = currentRates();
+      const inKrw = amount * r[fromCode];
+      return inKrw / r[toCode];
     }
 
     function updateFieldLabels() {
@@ -374,7 +462,7 @@ HTML_TEMPLATE = """
       updateFrom(0);
     }
 
-    if (canConvert) {
+    if (canConvertNow()) {
       fields.forEach((field, index) => {
         field.input.addEventListener("input", () => updateFrom(index));
         field.select.addEventListener("change", () => {
@@ -382,6 +470,7 @@ HTML_TEMPLATE = """
           updateFrom(index);
         });
       });
+      rateTypeSelect.addEventListener("change", () => updateFrom(0));
       addFieldBtn.addEventListener("click", addField);
       removeFieldBtn.addEventListener("click", removeField);
       updateFieldLabels();
@@ -392,6 +481,7 @@ HTML_TEMPLATE = """
         field.input.disabled = true;
         field.select.disabled = true;
       });
+      rateTypeSelect.disabled = true;
       addFieldBtn.disabled = true;
       removeFieldBtn.disabled = true;
       fieldCountText.textContent = "환율 조회 실패";
@@ -406,9 +496,9 @@ HTML_TEMPLATE = """
 
 @dataclass(slots=True)
 class RateSnapshot:
-    """네이버에서 읽어온 환율 스냅샷(USD 페어 기준)과 시각 정보."""
+    """네이버에서 읽어온 환율 스냅샷(KRW 기준, 타입별)과 시각 정보."""
 
-    usd_rates: dict[str, float]
+    rates_by_type: dict[str, dict[str, float]]
     source_time_text: str | None
     fetched_at_text: str
 
@@ -438,8 +528,16 @@ def _parse_rate_time(row_html: str) -> str | None:
     return match.group(1).strip()
 
 
+def _parse_td_value(row_html: str, td_class: str) -> float:
+    """행 HTML에서 특정 컬럼(td class)의 숫자를 추출합니다."""
+    match = re.search(rf"<td class=\\\"{td_class}\\\">([^<]+)</td>", row_html)
+    if not match:
+        raise ValueError(f"{td_class} 값을 파싱할 수 없습니다.")
+    return float(match.group(1).strip().replace(",", ""))
+
+
 def fetch_naver_rates() -> RateSnapshot:
-    """네이버 금융에서 선택 통화들의 USD 페어 환율을 가져옵니다."""
+    """네이버 금융에서 선택 통화들의 환율을 타입별로(KRW 기준) 가져옵니다."""
     req = Request(
         NAVER_EXCHANGE_LIST_URL,
         headers={"User-Agent": "Mozilla/5.0"},
@@ -451,52 +549,97 @@ def fetch_naver_rates() -> RateSnapshot:
     except URLError as exc:
         raise RuntimeError("네이버 환율 페이지에 연결할 수 없습니다.") from exc
 
-    usd_rates: dict[str, float] = {"USD": 1.0}
+    # KRW=1.0은 교차환산 편의를 위한 기준값입니다.
+    rates_by_type: dict[str, dict[str, float]] = {
+        "sale": {"KRW": 1.0},
+        "buy": {"KRW": 1.0},
+        "sell": {"KRW": 1.0},
+        "send": {"KRW": 1.0},
+        "receive": {"KRW": 1.0},
+    }
     source_time_text: str | None = None
 
     for code, meta in CURRENCY_META.items():
-        if code == "USD":
+        market_code = meta["market_code"]
+        source_unit = float(meta["source_unit"])
+        if market_code is None:
             continue
 
-        pair_candidates = meta.get("usd_pairs", [])
-        matched = False
-        for market_code, is_inverse, unit in pair_candidates:
-            try:
-                row_html = _parse_market_row(html, market_code)
-            except ValueError:
-                continue
+        row_html = _parse_market_row(html, market_code)
 
-            raw_rate = _parse_rate(row_html)
-            normalized = raw_rate / float(unit)
-            usd_rates[code] = (1.0 / normalized) if is_inverse else normalized
-            matched = True
-            if source_time_text is None:
-                source_time_text = _parse_rate_time(row_html)
-            break
+        # 네이버 표의 컬럼: sale(매매기준율), buy/sell(현찰), send/receive(송금)
+        for rate_type, td_class in [
+            ("sale", "sale"),
+            ("buy", "buy"),
+            ("sell", "sell"),
+            ("send", "send"),
+            ("receive", "receive"),
+        ]:
+            raw = _parse_td_value(row_html, td_class)
+            rates_by_type[rate_type][code] = raw / source_unit
 
-        if not matched:
-            raise RuntimeError(f"USD 페어 환율을 찾을 수 없습니다: {code}")
+        if source_time_text is None:
+            source_time_text = _parse_rate_time(row_html)
 
     fetched_at_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return RateSnapshot(
-        usd_rates=usd_rates,
+        rates_by_type=rates_by_type,
         source_time_text=source_time_text,
         fetched_at_text=fetched_at_text,
     )
+
+
+def fetch_usdkrw_history(days: int = 183) -> list[tuple[str, float]]:
+    """최근 N일(대략 6개월) USD/KRW 일자별 환율을 가져옵니다(참고용, 외부 API)."""
+    cache_key = f"usdkrw:{days}"
+    now = datetime.now()
+    cached = _HIST_CACHE.get(cache_key)
+    if cached and (now - cached[0]).total_seconds() < 6 * 3600:
+        return cached[1]
+
+    end = date.today()
+    start = end - timedelta(days=days)
+    url = (
+        f"{EXCHANGERATE_TIMESERIES_URL}"
+        f"?start_date={start.isoformat()}&end_date={end.isoformat()}"
+        f"&base=USD&symbols=KRW"
+    )
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(req, timeout=15) as response:
+        payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+
+    rates = payload.get("rates", {})
+    series: list[tuple[str, float]] = []
+    for d, obj in rates.items():
+        try:
+            v = float(obj["KRW"])
+        except Exception:
+            continue
+        series.append((d, v))
+
+    series.sort(key=lambda x: x[0])
+    _HIST_CACHE[cache_key] = (now, series)
+    return series
 
 
 @app.route("/", methods=["GET"])
 def index() -> str:
     error: str | None = None
     # 조회 실패 시에도 UI는 깨지지 않게 기본값으로 렌더링합니다.
-    usd_rates = {code: (1.0 if code == "USD" else 0.0) for code in CURRENCY_META}
+    rates_by_type: dict[str, dict[str, float]] = {
+        "sale": {code: (1.0 if code == "KRW" else 0.0) for code in CURRENCY_META},
+        "buy": {code: (1.0 if code == "KRW" else 0.0) for code in CURRENCY_META},
+        "sell": {code: (1.0 if code == "KRW" else 0.0) for code in CURRENCY_META},
+        "send": {code: (1.0 if code == "KRW" else 0.0) for code in CURRENCY_META},
+        "receive": {code: (1.0 if code == "KRW" else 0.0) for code in CURRENCY_META},
+    }
     rate_time_text = "조회 실패"
     currencies = [{"code": code, "label": meta["label"], "flag": meta["flag"]} for code, meta in CURRENCY_META.items()]
     default_codes = ["USD", "KRW", "PHP", "EUR"]
 
     try:
         snapshot = fetch_naver_rates()
-        usd_rates = snapshot.usd_rates
+        rates_by_type = snapshot.rates_by_type
         if snapshot.source_time_text:
             rate_time_text = f"{snapshot.source_time_text} (네이버 표기 시각)"
         else:
@@ -504,13 +647,48 @@ def index() -> str:
     except Exception as exc:
         error = f"환율 조회에 실패했습니다: {exc}"
 
+    # 6개월 히스토리(참고용) + 밈
+    hist_series: list[tuple[str, float]] = []
+    hist_meme = "데이터를 불러오는 중..."
+    hist_start = ""
+    hist_end = ""
+    try:
+        hist_series = fetch_usdkrw_history(days=183)
+        if hist_series:
+            hist_start = hist_series[0][0]
+            hist_end = hist_series[-1][0]
+            today_rate = hist_series[-1][1]
+            min_day, min_rate = min(hist_series, key=lambda x: x[1])
+            max_day, max_rate = max(hist_series, key=lambda x: x[1])
+
+            if today_rate > min_rate:
+                diff = today_rate - min_rate
+                hist_meme = (
+                    f"아 그때({min_day}) 달러 샀으면 지금보다 {diff:,.2f}원/달러 싸게 샀는데..."
+                    f" (최저 {min_rate:,.2f}, 오늘 {today_rate:,.2f})"
+                )
+            else:
+                hist_meme = f"지금이 그때다. (최저={min_rate:,.2f}, 오늘={today_rate:,.2f})"
+
+            # 범위 정보도 같이 보이게(짧게)
+            hist_meme += f" / 6개월 고점({max_day}) {max_rate:,.2f}"
+        else:
+            hist_meme = "최근 6개월 데이터를 가져오지 못했습니다."
+    except Exception:
+        hist_meme = "최근 6개월 데이터를 가져오지 못했습니다."
+
     return render_template_string(
         HTML_TEMPLATE,
         error=error,
-        usd_rates=usd_rates,
+        rates_by_type=rates_by_type,
         currencies=currencies,
         default_codes=default_codes,
         rate_time_text=rate_time_text,
+        hist_series=hist_series,
+        hist_meme=hist_meme,
+        hist_start=hist_start,
+        hist_end=hist_end,
+        hist_count=len(hist_series),
     )
 
 
