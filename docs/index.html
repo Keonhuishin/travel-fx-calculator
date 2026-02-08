@@ -344,7 +344,11 @@
         return;
       }
       const sourceAmount = parsed.number;
-      const sourceFormatted = formatEditableNumberText(parsed.cleaned);
+      // Keep "in-progress" trailing dot while typing, otherwise normalize to the same
+      // computed format as other fields (so all rows behave consistently).
+      const sourceFormatted = parsed.cleaned.endsWith(".")
+        ? formatEditableNumberText(parsed.cleaned)
+        : toInputValue(sourceAmount);
       if (preserveSourceCaret) setValuePreserveCaret(source.inp, sourceFormatted, sourceOldText, sourceOldCaret);
       else source.inp.value = sourceFormatted;
 
@@ -388,6 +392,19 @@
           const oldCaret = f.inp.selectionStart ?? oldText.length;
           lastEditedIndex = idx;
           updateFrom(ratesByType, fields, idx, true, oldText, oldCaret);
+        });
+        f.inp.addEventListener("blur", () => {
+          // If the user leaves the field empty, snap back to the default "0".
+          const parsed = parseEditableNumber(f.inp.value);
+          lastEditedIndex = idx;
+          if (parsed.empty) {
+            f.inp.value = "0";
+            updateFrom(ratesByType, fields, idx);
+            return;
+          }
+          // On blur, normalize to computed format (no trailing dot, trim zeros).
+          f.inp.value = toInputValue(parsed.number);
+          updateFrom(ratesByType, fields, idx);
         });
         f.sel.addEventListener("change", () => {
           const oldCode = getPrevCode(idx);
