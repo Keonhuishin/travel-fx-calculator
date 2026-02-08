@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-02-08T11:00:31+00:00",
+  "fetched_at": "2026-02-08T11:48:38+00:00",
   "source": "https://finance.naver.com/marketindex/exchangeList.naver",
   "rates_by_type": {
     "sale": {
@@ -96,7 +96,7 @@
     },
     {
       "code": "JPY",
-      "label": "일본 엔화 (JPY)",
+      "label": "일본 엔 (JPY)",
       "flag": "🇯🇵",
       "source_unit": 100
     },
