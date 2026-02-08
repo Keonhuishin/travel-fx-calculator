@@ -381,8 +381,7 @@ async function loadSnapshot() {
   return await res.json();
 }
 
-loadSnapshot()
-  .then((data) => {
+loadSnapshot()\n  .then((data) => {\n    if (errorEl) { errorEl.style.display = "none"; errorEl.textContent = ""; }
     setVersionPill(data);
 
     const ratesByType = data.rates_by_type;
@@ -523,4 +522,5 @@ loadSnapshot()
     }
     setVersionPill(null);
   });
+
 
