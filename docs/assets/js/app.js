@@ -14,25 +14,27 @@ const DEFAULT_CODES = ["USD", "KRW", "PHP", "EUR", "JPY"]; // initial selection
 const MIN_FIELDS = 1;
 const MAX_FIELDS = 5;
 
-// Pretty version label for UX (semver-ish). Override with ?ver=1.3.4
+// Pretty version label for UX (semver-ish). Override with ?ver=1.3.5
 const UI_SEMVER = "1.3.4";
 
 const CODE_LABEL = {
-  KRW: "Korean Won (KRW)",
-  USD: "US Dollar (USD)",
-  CNY: "Chinese Yuan (CNY)",
-  PHP: "Philippine Peso (PHP)",
-  TWD: "Taiwan Dollar (TWD)",
-  JPY: "Japanese Yen (JPY)",
-  VND: "Vietnamese Dong (VND)",
-  THB: "Thai Baht (THB)",
-  EUR: "Euro (EUR)",
-  AUD: "Australian Dollar (AUD)",
+  USD: "미국 달러 (USD)",
+  KRW: "대한민국 원화 (KRW)",
+  PHP: "필리핀 페소 (PHP)",
+  TWD: "대만 달러 (TWD)",
+  JPY: "일본 엔화 (JPY)",
+  EUR: "유로 (EUR)",
+  AUD: "호주 달러 (AUD)",
+  THB: "태국 바트 (THB)",
+  VND: "베트남 동 (VND)",
+  CNY: "중국 위안 (CNY)",
 };
 
-// Local-only save (privacy-friendly): localStorage on the user's device.
-const STORAGE_KEY = "travel-fx-calculator.saved.v1";
-const MAX_SAVED = 30;
+const CODE_ORDER = ["USD", "KRW", "PHP", "TWD", "JPY", "EUR", "AUD", "THB", "VND", "CNY"];
+
+// Local-only 기록: localStorage on the user's device.
+const STORAGE_KEY = "travel-fx-calculator.history.v1";
+const MAX_SAVED = 50;
 
 let activeCount = 3;
 let lastEditedIndex = 0;
@@ -122,7 +124,7 @@ function convertAmount(ratesByType, amount, fromCode, toCode) {
 
 function refreshRows(fields) {
   fields.forEach((f, idx) => f.row.classList.toggle("hidden", idx >= activeCount));
-  fieldCountText.textContent = `Showing: ${activeCount} / ${MAX_FIELDS}`;
+  fieldCountText.textContent = `표시 중: ${activeCount} / ${MAX_FIELDS}`;
   addFieldBtn.disabled = activeCount >= MAX_FIELDS;
   removeFieldBtn.disabled = activeCount <= MIN_FIELDS;
 }
@@ -140,7 +142,7 @@ function applyEnabledState(ratesByType, fields) {
     f.sel.disabled = true;
   });
 
-  if (!ok) fieldCountText.textContent = `Showing: ${activeCount} / ${MAX_FIELDS} (rates missing)`;
+  if (!ok) fieldCountText.textContent = `표시 중: ${activeCount} / ${MAX_FIELDS} (환율 데이터 부족)`;
   return ok;
 }
 
@@ -150,16 +152,18 @@ function renderMeta(data) {
   meta.replaceChildren();
 
   const l1 = document.createElement("div");
-  l1.appendChild(document.createTextNode("Rate basis: "));
+  l1.appendChild(document.createTextNode("환율 기준: "));
   const strong = document.createElement("strong");
   strong.textContent = typeLabel;
   l1.appendChild(strong);
 
   const l2 = document.createElement("div");
-  l2.textContent = `Updated: ${data.fetched_at || "-"}`;
+  l2.textContent = `업데이트: ${data.fetched_at || "-"}`;
 
   const l3 = document.createElement("div");
-  l3.textContent = data.source ? `Source: Naver Finance (${data.source})` : "Source: Naver Finance";
+  l3.textContent = data.source
+    ? `출처: 네이버 금융 (${data.source})`
+    : "출처: 네이버 금융";
 
   meta.appendChild(l1);
   meta.appendChild(l2);
@@ -233,7 +237,7 @@ function buildRow(i, codes) {
 
   const sel = document.createElement("select");
   sel.id = `currency_${i + 1}`;
-  sel.setAttribute("aria-label", "Currency");
+  sel.setAttribute("aria-label", "통화");
   codes.forEach((code) => {
     const opt = document.createElement("option");
     opt.value = code;
@@ -254,7 +258,7 @@ function buildRow(i, codes) {
   inp.type = "text";
   inp.inputMode = "decimal";
   inp.id = `amount_${i + 1}`;
-  inp.setAttribute("aria-label", "Amount");
+  inp.setAttribute("aria-label", "금액");
   inp.value = "0.00";
   inp.placeholder = "0.00";
 
@@ -273,103 +277,115 @@ function safeJsonParse(text, fallback) {
   }
 }
 
-function loadSaved() {
+function loadHistory() {
   const raw = localStorage.getItem(STORAGE_KEY);
   const data = safeJsonParse(raw || "[]", []);
   return Array.isArray(data) ? data : [];
 }
 
-function saveSaved(list) {
+function saveHistory(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_SAVED)));
 }
 
-function renderSaved(list, onLoad, onDelete, onClear) {
+function commaInt(s) {
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatRecordAmount(code, n) {
+  const v = Number.isFinite(n) && n >= 0 ? n : 0;
+  const fixed = code === "KRW" ? 0 : 2;
+  let s = v.toFixed(fixed);
+  if (fixed === 2 && s.endsWith(".00")) s = s.slice(0, -3);
+  const parts = s.split(".");
+  parts[0] = commaInt(parts[0]);
+  return parts.join(".");
+}
+
+function formatRecordTitle(rows) {
+  return rows
+    .map((r) => `${r.code} ${formatRecordAmount(r.code, r.amount)}`)
+    .join(" / ");
+}
+
+function formatKoreanTime(iso) {
+  try {
+    return new Date(iso).toLocaleString("ko-KR", { hour12: false });
+  } catch {
+    return iso || "";
+  }
+}
+
+function renderHistory(list, onDelete, onClear) {
   if (!savedEl) return;
+
+  if (list.length === 0) {
+    savedEl.hidden = true;
+    savedEl.replaceChildren();
+    return;
+  }
 
   savedEl.hidden = false;
   savedEl.replaceChildren();
 
-  const details = document.createElement("details");
-  details.className = "saved-details";
+  const head = document.createElement("div");
+  head.className = "history-head";
 
-  const summary = document.createElement("summary");
-  summary.textContent = `Saved (${list.length})`;
-  details.appendChild(summary);
+  const title = document.createElement("div");
+  title.className = "history-title";
+  title.textContent = `기록 (${list.length})`;
 
-  const body = document.createElement("div");
-  body.className = "saved-body";
+  const clearBtn = document.createElement("button");
+  clearBtn.type = "button";
+  clearBtn.className = "saved-btn danger";
+  clearBtn.textContent = "전체 삭제";
+  clearBtn.addEventListener("click", onClear);
 
-  if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "saved-empty";
-    empty.textContent = "No saved calculations yet.";
-    body.appendChild(empty);
-  } else {
-    const ul = document.createElement("ul");
-    ul.className = "saved-list";
+  head.appendChild(title);
+  head.appendChild(clearBtn);
+  savedEl.appendChild(head);
 
-    list.forEach((item, idx) => {
-      const li = document.createElement("li");
-      li.className = "saved-item";
+  const ul = document.createElement("ul");
+  ul.className = "saved-list";
 
-      const left = document.createElement("div");
-      left.className = "saved-left";
+  list.forEach((item, idx) => {
+    const li = document.createElement("li");
+    li.className = "saved-item";
 
-      const title = document.createElement("div");
-      title.className = "saved-title";
-      title.textContent = item.title || `#${idx + 1}`;
+    const left = document.createElement("div");
+    left.className = "saved-left";
 
-      const sub = document.createElement("div");
-      sub.className = "saved-sub";
-      sub.textContent = item.at || "";
+    const t = document.createElement("div");
+    t.className = "saved-title";
+    t.textContent = item.title || formatRecordTitle(item.rows || []);
 
-      left.appendChild(title);
-      left.appendChild(sub);
+    const sub = document.createElement("div");
+    sub.className = "saved-sub";
+    sub.textContent = formatKoreanTime(item.at);
 
-      const actions = document.createElement("div");
-      actions.className = "saved-actions";
+    left.appendChild(t);
+    left.appendChild(sub);
 
-      const loadBtn = document.createElement("button");
-      loadBtn.type = "button";
-      loadBtn.className = "saved-btn";
-      loadBtn.textContent = "Load";
-      loadBtn.addEventListener("click", () => onLoad(idx));
+    const actions = document.createElement("div");
+    actions.className = "saved-actions";
 
-      const delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "saved-btn danger";
-      delBtn.textContent = "Delete";
-      delBtn.addEventListener("click", () => onDelete(idx));
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "saved-btn danger";
+    delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => onDelete(idx));
 
-      actions.appendChild(loadBtn);
-      actions.appendChild(delBtn);
+    actions.appendChild(delBtn);
 
-      li.appendChild(left);
-      li.appendChild(actions);
-      ul.appendChild(li);
-    });
+    li.appendChild(left);
+    li.appendChild(actions);
 
-    body.appendChild(ul);
+    ul.appendChild(li);
+  });
 
-    const clearWrap = document.createElement("div");
-    clearWrap.className = "saved-clear";
-
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "saved-btn danger";
-    clearBtn.textContent = "Clear all";
-    clearBtn.addEventListener("click", onClear);
-
-    clearWrap.appendChild(clearBtn);
-    body.appendChild(clearWrap);
-  }
-
-  details.appendChild(body);
-  savedEl.appendChild(details);
+  savedEl.appendChild(ul);
 }
 
 async function loadSnapshot() {
-  // Cache-bust using 't' param.
   const res = await fetch(`./data/rates.json?t=${Date.now()}`);
   if (!res.ok) throw new Error("rates.json not found");
   return await res.json();
@@ -382,8 +398,7 @@ loadSnapshot()
     const ratesByType = data.rates_by_type;
     const sale = ratesByType && ratesByType.sale ? ratesByType.sale : {};
 
-    const supportedCodes = Object.keys(CODE_LABEL).filter((code) => Object.prototype.hasOwnProperty.call(sale, code));
-    if (!supportedCodes.includes("KRW")) supportedCodes.unshift("KRW");
+    const supportedCodes = CODE_ORDER.filter((code) => Object.prototype.hasOwnProperty.call(sale, code));
 
     const fields = [];
     for (let i = 0; i < MAX_FIELDS; i++) {
@@ -393,49 +408,24 @@ loadSnapshot()
       setPrevCode(f, f.sel.value);
     }
 
-    function rerenderSaved() {
-      const list = loadSaved();
-      renderSaved(
+    function rerenderHistory() {
+      const list = loadHistory();
+      renderHistory(
         list,
         (idx) => {
-          const item = list[idx];
-          if (!item) return;
-
-          activeCount = Math.min(MAX_FIELDS, Math.max(MIN_FIELDS, item.activeCount || 3));
-          rateTypeSelect.value = item.rateType || "sale";
-          lastEditedIndex = Math.min(activeCount - 1, Math.max(0, item.sourceIndex || 0));
-
-          refreshRows(fields);
-
-          const rows = Array.isArray(item.rows) ? item.rows : [];
-          for (let i = 0; i < Math.min(rows.length, MAX_FIELDS); i++) {
-            const r = rows[i];
-            if (!r) continue;
-            if (r.code && supportedCodes.includes(r.code)) fields[i].sel.value = r.code;
-            fields[i].flag.src = flagUrl(fields[i].sel.value);
-            if (typeof r.text === "string") fields[i].inp.value = r.text;
-            else if (typeof r.amount === "number") fields[i].inp.value = toInputValue(r.amount);
-            setPrevCode(fields[i], fields[i].sel.value);
-          }
-
-          applyEnabledState(ratesByType, fields);
-          renderMeta(data);
-          updateFrom(ratesByType, fields, lastEditedIndex);
-        },
-        (idx) => {
-          const next = loadSaved();
+          const next = loadHistory();
           next.splice(idx, 1);
-          saveSaved(next);
-          rerenderSaved();
+          saveHistory(next);
+          rerenderHistory();
         },
         () => {
-          saveSaved([]);
-          rerenderSaved();
+          saveHistory([]);
+          rerenderHistory();
         },
       );
     }
 
-    rerenderSaved();
+    rerenderHistory();
 
     fields.forEach((f, idx) => {
       f.inp.addEventListener("focus", () => {
@@ -516,27 +506,25 @@ loadSnapshot()
 
     if (saveBtn) {
       saveBtn.addEventListener("click", () => {
-        const list = loadSaved();
+        const list = loadHistory();
         const at = new Date().toISOString();
+
         const rows = fields.slice(0, activeCount).map((ff) => ({
           code: ff.sel.value,
-          text: String(ff.inp.value || "").trim(),
           amount: parseEditableNumber(ff.inp.value).number,
         }));
 
-        const title = rows.map((r) => r.code).join(" / ");
-
         list.unshift({
           at,
-          title,
+          title: formatRecordTitle(rows),
           rateType: rateTypeSelect.value,
           activeCount,
           sourceIndex: Math.min(activeCount - 1, Math.max(0, lastEditedIndex)),
           rows,
         });
 
-        saveSaved(list);
-        rerenderSaved();
+        saveHistory(list);
+        rerenderHistory();
       });
     }
 
@@ -548,8 +536,7 @@ loadSnapshot()
   .catch((e) => {
     if (errorEl) {
       errorEl.style.display = "block";
-      errorEl.textContent = `Failed to load rates: ${e.message}`;
+      errorEl.textContent = `환율 데이터를 불러오지 못했습니다: ${e.message}`;
     }
     setVersionPill(null);
   });
-

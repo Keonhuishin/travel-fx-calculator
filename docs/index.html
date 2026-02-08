@@ -7,26 +7,26 @@
   <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#f3f8ff" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self';" />
-  <title>🧳 Travel FX Calculator</title>
+  <title>🧳 여행용 환율 계산기</title>
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
 <body>
   <main class="wrap">
-    <h1>🧳 Travel FX Calculator</h1>
+    <h1>🧳 여행용 환율 계산기</h1>
 
     <section class="toolbar">
-      <button type="button" id="add_field" aria-label="Add currency" title="Add currency">+ Add</button>
-      <button type="button" id="remove_field" aria-label="Remove currency" title="Remove currency">- Remove</button>
-      <button type="button" id="save_calc" aria-label="Save" title="Save">Save</button>
-      <select id="rate_type" aria-label="Rate type" title="Rate type">
-        <option value="sale" selected>Mid-market</option>
-        <option value="buy">Cash buy</option>
-        <option value="sell">Cash sell</option>
-        <option value="send">Remit send</option>
-        <option value="receive">Remit receive</option>
+      <button type="button" id="add_field" aria-label="통화 추가" title="통화 추가">+ 추가</button>
+      <button type="button" id="remove_field" aria-label="통화 제거" title="통화 제거">- 제거</button>
+      <select id="rate_type" aria-label="환율 기준" title="환율 기준">
+        <option value="sale" selected>매매기준율</option>
+        <option value="buy">현찰 사실 때</option>
+        <option value="sell">현찰 파실 때</option>
+        <option value="send">송금 보내실 때</option>
+        <option value="receive">송금 받으실 때</option>
       </select>
       <span class="count" id="field_count_text"></span>
+      <button type="button" id="save_calc" aria-label="기록" title="기록">기록</button>
     </section>
 
     <section class="grid" id="grid"></section>
@@ -42,4 +42,3 @@
   <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>
-
