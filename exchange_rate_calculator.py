@@ -361,7 +361,7 @@ HTML_TEMPLATE = """
 
 
     
-            const DEFAULT_UI_VERSION = '2239fa4';
+            const DEFAULT_UI_VERSION = '2a8020a';
     const UI_VERSION = (new URLSearchParams(window.location.search)).get('v') || DEFAULT_UI_VERSION;
 const appVersionEl = document.getElementById("app_version");
         if (appVersionEl) {
@@ -895,6 +895,7 @@ if __name__ == "__main__":
     debug = os.getenv("DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}
 
     app.run(host=host, port=port, debug=debug)
+
 
 
 
