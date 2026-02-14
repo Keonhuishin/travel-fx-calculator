@@ -1,7 +1,7 @@
 {
-  "fetched_at": "2026-02-14T14:58:31+00:00",
+  "fetched_at": "2026-02-14T15:53:32+00:00",
   "source": "https://finance.naver.com/marketindex/exchangeList.naver",
-  "build_sha": "5407693",
+  "build_sha": "b9386ea",
   "rates_by_type": {
     "sale": {
       "KRW": 1.0,
